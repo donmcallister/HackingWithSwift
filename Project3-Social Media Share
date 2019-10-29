@@ -1,0 +1,51 @@
+//
+//  DetailViewController.swift
+//  Project1 modified: UIBarButtonItem, UIActivityViewController, Share Image
+//  Let users share to Facebook and Twitter by modifying project 1.
+//
+//  Created by Donald McAllister on 10/28/19.
+//  Copyright © 2019 Donald McAllister. All rights reserved.
+//
+
+import UIKit
+
+class DetailViewController: UIViewController {
+    @IBOutlet var imageView: UIImageView!
+    var selectedImage: String?
+    var selectedIndex = 0
+    var pictureCount = 0
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        title = "Picture \(selectedIndex) of \(pictureCount)"
+        
+        navigationItem.largeTitleDisplayMode = .never
+        
+        navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .action, target: self, action: #selector(shareTapped))
+        
+        if let imageToLoad = selectedImage {
+            imageView.image = UIImage(named: imageToLoad)
+        }
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        navigationController?.hidesBarsOnTap = true 
+    }
+    
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        navigationController?.hidesBarsOnTap = false
+    }
+    
+    @objc func shareTapped() {
+        guard let image = imageView.image?.jpegData(compressionQuality: 0.8) else {
+            print("no image found")
+            return
+        }
+        let vc = UIActivityViewController(activityItems: [image], applicationActivities: [])
+        vc.popoverPresentationController?.barButtonItem = navigationItem.rightBarButtonItem
+        present(vc, animated: true)
+    }
+}

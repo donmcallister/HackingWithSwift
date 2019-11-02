@@ -1,0 +1,209 @@
+//
+//  GameScene.swift
+//  Project14
+//
+//  Created by Donald McAllister on 11/2/19.
+//  Copyright © 2019 Donald McAllister. All rights reserved.
+//
+
+import SpriteKit
+
+class GameScene: SKScene {
+    var slots = [WhackSlot]()
+    
+    var gameScore: SKLabelNode!
+    
+    var popupTime = 0.85
+    var numRounds = 0   //increment in createEnemy
+    
+    var score = 0 {
+        didSet {
+            gameScore.text = "Score: \(score)"
+        }
+    }
+    
+ 
+    override func didMove(to view: SKView) {
+        let background = SKSpriteNode(imageNamed: "whackBackground")
+        background.position = CGPoint(x: 512, y: 384)   // middle of parent view
+        background.blendMode = .replace
+        background.zPosition = -1
+        addChild(background)
+        
+        gameScore = SKLabelNode(fontNamed: "Chalkduster")
+        gameScore.text = "Score: 0"
+        gameScore.position = CGPoint(x: 8, y: 8)        //bottom left corner
+        gameScore.horizontalAlignmentMode = .left       //left aligned text
+        gameScore.fontSize = 48
+        addChild(gameScore)
+        
+        for i in 0..<5 { createSlot(at: CGPoint(x: 100 + (i * 170), y: 410))}
+        for i in 0..<4 { createSlot(at: CGPoint(x: 180 + (i * 170), y: 320))}
+        for i in 0..<5 { createSlot(at: CGPoint(x: 100 + (i * 170), y: 230))}
+        for i in 0..<4 { createSlot(at: CGPoint(x: 180 + (i * 170), y: 140))}
+        //higher Y ==> more towards top of scene
+        //nodes by default don't crop, but we need to hide the penguins..SKCropNode
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            self?.createEnemy()
+        }
+   
+        }
+    
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first else { return }
+        let location = touch.location(in: self) //where did they tap the screen
+        let tappedNodes = nodes(at: location)
+        //loop over to see if friend or enemy:
+        for node in tappedNodes {
+            //read grandparent of thing that was tapped
+            guard let whackSlot = node.parent?.parent as? WhackSlot else { continue }
+            if !whackSlot.isVisible {continue}
+            if whackSlot.isHit { continue }
+             whackSlot.hit()
+            
+            if node.name == "charFriend" {
+                //shouldn't whack!
+                //visible, hit, score update, sound
+//                if !whackSlot.isVisible {continue}
+//                if whackSlot.isHit { continue }
+//                whackSlot.hit()
+                score -= 5
+                run(SKAction.playSoundFileNamed("whackBad.caf", waitForCompletion: false))
+            } else if node.name == "charEnemy" {
+//                //should whack!
+//                if !whackSlot.isVisible {continue}
+//                if whackSlot.isHit { continue }
+                
+                whackSlot.charNode.xScale = 0.85    //85% of regular scale
+                whackSlot.charNode.yScale = 0.85
+                
+//                whackSlot.hit()
+                score += 1
+                
+                run(SKAction.playSoundFileNamed("whack.caf", waitForCompletion: false))
+            }
+        }
+    }
+    
+    func createSlot(at position: CGPoint) {
+        let slot = WhackSlot()
+        slot.configure(at: position)
+        addChild(slot)
+        slots.append(slot)
+    }
+    
+    func createEnemy() {
+        numRounds += 1
+        
+        if numRounds >= 30 {
+            for slot in slots {
+                slot.hide()
+            }
+            
+            let gameOver = SKSpriteNode(imageNamed: "gameOver")
+            gameOver.position = CGPoint(x: 512, y: 384)
+            gameOver.zPosition = 1
+            addChild(gameOver)
+            return  //stop calling createEnemy, hit the max!! 
+        }
+        popupTime *= 0.991  // trial and error...decrease pop up time slowly, progressively
+        //dip into slots array, shuffled, and pick one:
+        slots.shuffle()
+        slots[0].show(hideTime: popupTime)
+        //sometimes show a 2,3,4 or 5th slot simultaneously:
+        if Int.random(in: 0...12) > 4 { slots[1].show(hideTime: popupTime)}
+        if Int.random(in: 0...12) > 8 { slots[2].show(hideTime: popupTime)}
+        if Int.random(in: 0...12) > 10 { slots[3].show(hideTime: popupTime)}
+        if Int.random(in: 0...12) > 11 { slots[4].show(hideTime: popupTime)}
+            //more rarely will show 4-5+ at a time
+        
+        let minDelay = popupTime / 2.0
+        let maxDelay = popupTime * 2
+        let delay = Double.random(in: minDelay...maxDelay)
+        
+        //call yourself, using GCD
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.createEnemy()
+        }
+    }
+}
+
+//
+//  WhackSlot.swift
+//  Project14
+//
+//  Created by Donald McAllister on 11/2/19.
+//  Copyright © 2019 Donald McAllister. All rights reserved.
+//
+
+import SpriteKit
+import UIKit
+
+class WhackSlot: SKNode { //building a tree of nodes..
+    var charNode: SKSpriteNode!
+    
+    var isVisible = false
+    var isHit = false
+    
+    func configure(at position: CGPoint) {
+        self.position = position
+        
+        let sprite = SKSpriteNode(imageNamed: "whackHole")
+        addChild(sprite)
+        
+        let cropNode = SKCropNode()
+        cropNode.position = CGPoint(x: 0, y: 15)
+        cropNode.zPosition = 1
+        cropNode.maskNode = SKSpriteNode(imageNamed: "whackMask") //to see penguins below, make maskNode = nil
+        
+        charNode = SKSpriteNode(imageNamed: "penguinGood")
+        charNode.position = CGPoint(x: 0, y: -90)   //way below the hole
+        charNode.name = "character"
+        cropNode.addChild(charNode) //inside the cropNode, creating a hierarchy
+        addChild(cropNode)
+        
+    }
+    
+    func show(hideTime: Double) {
+        if isVisible { return } //don't show again and again if visible
+        charNode.xScale = 1 //put it back to full regular size 
+        charNode.yScale = 1
+        charNode.run(SKAction.moveBy(x: 0, y: 80, duration: 0.05))
+        isVisible = true
+        isHit = false
+        
+        if Int.random(in: 0...2) == 0 {
+            // 1 of 3 times
+            charNode.texture = SKTexture(imageNamed: "penguinGood")
+            charNode.name = "charFriends"
+        } else {
+            // other two times
+            charNode.texture = SKTexture(imageNamed: "penguinEvil")
+            charNode.name = "charEnemy"
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + (hideTime * 3.5)) { [weak self] in
+            self?.hide()
+        }
+    }
+    
+    func hide() {
+        if !isVisible { return }
+        
+        charNode.run(SKAction.moveBy(x: 0, y: -80, duration: 0.05))
+        isVisible = false
+    }
+    
+    func hit() {
+        isHit = true
+        
+        let delay = SKAction.wait(forDuration: 0.25)
+        let hide = SKAction.moveBy(x: 0, y: -80, duration: 0.5)
+        let notVisible = SKAction.run {
+            [weak self] in self?.isVisible = false
+        }
+        let sequence = SKAction.sequence([delay, hide, notVisible])
+        charNode.run(sequence)
+    }
+}

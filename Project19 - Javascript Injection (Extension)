@@ -1,0 +1,98 @@
+//  Project 19 - Javascript Injection by Extension
+//  ActionViewController.swift
+//  Extension
+//
+//  Created by Donald McAllister on 11/3/19.
+//  Copyright © 2019 Donald McAllister. All rights reserved.
+//
+// adjusted info.plist NSExtension dictionary 1) attributes 2) activationRule
+
+import UIKit
+import MobileCoreServices
+
+class ActionViewController: UIViewController {
+    @IBOutlet var script: UITextView!
+    
+    var pageTitle = ""
+    var pageURL = ""
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(done))
+        
+        let notificationCenter = NotificationCenter.default
+        notificationCenter.addObserver(self, selector: #selector(adjustForKeyboard), name: UIResponder.keyboardWillHideNotification, object: nil)
+        notificationCenter.addObserver(self, selector: #selector(adjustForKeyboard), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+    
+        if let inputItem = extensionContext?.inputItems.first as? NSExtensionItem {
+            if let itemProvider = inputItem.attachments?.first {
+                itemProvider.loadItem(forTypeIdentifier: kUTTypePropertyList as String) { [weak self] (dict, err) in
+                    //dict will tell us actually what was provided to us by iOS
+                    //what do we want to get? plist
+                    //created Action.js
+                    //now do stuff:
+                    guard let itemDictionary = dict as? NSDictionary else { return }
+                    guard let javaScriptValues = itemDictionary[NSExtensionJavaScriptPreprocessingResultsKey] as? NSDictionary else { return }
+                    // print(javaScriptValues)
+                    self?.pageTitle = javaScriptValues["title"] as? String ?? ""
+                    self?.pageURL = javaScriptValues["URL"] as? String ?? ""
+                    
+                    //closure inside a closure ==> no [weak self] since outer already declared it weak:
+                    DispatchQueue.main.async {
+                        self?.title = self?.pageTitle
+                    }
+                }
+            }
+        }
+    }
+
+    @IBAction func done() {
+        //inverse of viewDidLoad logic: to send back to iOS
+        let item = NSExtensionItem()
+        let argument: NSDictionary = ["customJavaScript": script.text]
+        let webDictionary: NSDictionary = [NSExtensionJavaScriptFinalizeArgumentKey: argument]
+        let customJavaScript = NSItemProvider(item: webDictionary, typeIdentifier: kUTTypePropertyList as String)
+        item.attachments = [customJavaScript]
+        extensionContext?.completeRequest(returningItems: [item])
+    }
+    
+    @objc func adjustForKeyboard(notification: Notification) {
+        guard let keyboardValue = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue else { return }
+        //now read its CGrect value:
+        let keyboardScreenEndFrame = keyboardValue.cgRectValue
+        //convert to views coordinates
+        let keyboardViewEndFrame = view.convert(keyboardScreenEndFrame, from: view.window)
+        
+        if notification.name == UIResponder.keyboardWillHideNotification {
+            script.contentInset = .zero
+        } else {
+            //in did change frame
+            script.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: keyboardViewEndFrame.height - view.safeAreaInsets.bottom, right: 0)
+        }
+        script.scrollIndicatorInsets = script.contentInset //match size in textview
+        
+        //scroll down to what user tapped on
+        let selectedRange = script.selectedRange
+        script.scrollRangeToVisible(selectedRange)
+        
+    }
+
+}
+/////// Action.js 
+var Action = function() { }
+
+Action.prototype = {
+    
+run: function(parameters) {
+    parameters.completionFunction({"URL": document.URL, "title": document.title});
+},
+    
+finalize: function(parameters) {
+    var customJavaScript = parameters["customJavaScript"];
+    eval(customJavaScript);
+}
+    
+};
+
+var ExtensionPreprocessingJS = new Action
